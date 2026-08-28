@@ -3,12 +3,11 @@ import { supabase } from '@/lib/supabase';
 
 export async function GET(
   request: Request,
-  { params }: { params: { siteName: string } }
+  { params }: { params: Promise<{ siteName: string }> }
 ) {
-  // Decode URL parameters (e.g. handles "kcey%20digital")
-  const siteName = decodeURIComponent(params.siteName);
+  const resolvedParams = await params;
+  const siteName = decodeURIComponent(resolvedParams.siteName);
 
-  // Download index.html from Supabase Storage
   const { data, error } = await supabase.storage
     .from('user-hosting-bucket')
     .download(`sites/${siteName}/index.html`);
@@ -19,10 +18,7 @@ export async function GET(
 
   const htmlContent = await data.text();
 
-  // Return the raw HTML to display in the browser
   return new NextResponse(htmlContent, {
-    headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-    },
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
   });
 }
