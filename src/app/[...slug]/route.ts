@@ -5,24 +5,23 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ slug: string[] }> }
 ) {
-  const resolvedParams = await context.params;
-  const slug = resolvedParams.slug;
+  const { slug } = await context.params;
 
   if (!slug || slug.length === 0) {
     return new NextResponse('Not Found', { status: 404 });
   }
 
-  // 1. Decode site name and folder paths
+  // 1. Decode site name and paths
   const pathSegments = slug.map((segment) => decodeURIComponent(segment));
   const siteName = pathSegments[0];
 
-  // 2. Resolve target file path in Supabase
+  // 2. Resolve file path in Supabase bucket
   const filePath =
     pathSegments.length === 1
       ? `sites/${siteName}/index.html`
       : `sites/${siteName}/${pathSegments.slice(1).join('/')}`;
 
-  // 3. Fetch target file from Supabase Storage
+  // 3. Fetch file from Supabase Storage
   const { data, error } = await supabase.storage
     .from('user-hosting-bucket')
     .download(filePath);
@@ -33,7 +32,7 @@ export async function GET(
     });
   }
 
-  // 4. Serve file with proper content headers
+  // 4. Set correct content-type header
   let contentType = 'text/html; charset=utf-8';
   if (filePath.endsWith('.css')) contentType = 'text/css';
   else if (filePath.endsWith('.js')) contentType = 'application/javascript';
