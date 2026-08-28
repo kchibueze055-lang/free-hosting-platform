@@ -11,37 +11,49 @@ export async function GET(
     return new NextResponse('Not Found', { status: 404 });
   }
 
-  // 1. Decode site name and paths
-  const pathSegments = slug.map((segment) => decodeURIComponent(segment));
-  const siteName = pathSegments[0];
+  // 1. Decode segments (e.g. "kcey%20digital" -> "kcey digital")
+  const rawSiteName = decodeURIComponent(slug[0]);
+  
+  // Create potential matching paths to check in Supabase
+  const targetSubPath = slug.length === 1 ? 'index.html' : slug.slice(1).join('/');
+  
+  const possiblePaths = [
+    `sites/${rawSiteName}/${targetSubPath}`,
+    `sites/${rawSiteName.trim()}/${targetSubPath}`,
+    `sites/${rawSiteName.toLowerCase()}/${targetSubPath}`,
+    `sites/${rawSiteName.replace(/\s+/g, '-')}/${targetSubPath}`,
+  ];
 
-  // 2. Resolve file path in Supabase bucket
-  const filePath =
-    pathSegments.length === 1
-      ? `sites/${siteName}/index.html`
-      : `sites/${siteName}/${pathSegments.slice(1).join('/')}`;
+  let fileBuffer: ArrayBuffer | null = null;
+  let matchedPath = '';
 
-  // 3. Fetch file from Supabase Storage
-  const { data, error } = await supabase.storage
-    .from('user-hosting-bucket')
-    .download(filePath);
+  // 2. Try fetching from Supabase using possible folder names
+  for (const path of possiblePaths) {
+    const { data } = await supabase.storage
+      .from('user-hosting-bucket')
+      .download(path);
 
-  if (error || !data) {
-    return new NextResponse(`Site file "${filePath}" not found in storage.`, {
+    if (data) {
+      fileBuffer = await data.arrayBuffer();
+      matchedPath = path;
+      break;
+    }
+  }
+
+  if (!fileBuffer) {
+    return new NextResponse(`Site file not found in storage. Checked paths:\n${possiblePaths.join('\n')}`, {
       status: 404,
     });
   }
 
-  // 4. Set correct content-type header
+  // 3. Set content type header
   let contentType = 'text/html; charset=utf-8';
-  if (filePath.endsWith('.css')) contentType = 'text/css';
-  else if (filePath.endsWith('.js')) contentType = 'application/javascript';
-  else if (filePath.endsWith('.png')) contentType = 'image/png';
-  else if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) contentType = 'image/jpeg';
+  if (matchedPath.endsWith('.css')) contentType = 'text/css';
+  else if (matchedPath.endsWith('.js')) contentType = 'application/javascript';
+  else if (matchedPath.endsWith('.png')) contentType = 'image/png';
+  else if (matchedPath.endsWith('.jpg') || matchedPath.endsWith('.jpeg')) contentType = 'image/jpeg';
 
-  const buffer = await data.arrayBuffer();
-
-  return new NextResponse(buffer, {
+  return new NextResponse(fileBuffer, {
     headers: { 'Content-Type': contentType },
   });
 }
