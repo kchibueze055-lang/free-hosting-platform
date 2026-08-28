@@ -6,14 +6,19 @@ export async function GET(
   { params }: { params: Promise<{ siteName: string }> }
 ) {
   const resolvedParams = await params;
-  const siteName = decodeURIComponent(resolvedParams.siteName);
+  
+  // Clean up URL encoding (converts %20 back to spaces)
+  const siteName = decodeURIComponent(resolvedParams.siteName).trim();
 
+  // Fetch index.html from Supabase Storage
   const { data, error } = await supabase.storage
     .from('user-hosting-bucket')
     .download(`sites/${siteName}/index.html`);
 
   if (error || !data) {
-    return new NextResponse('Site Not Found', { status: 404 });
+    return new NextResponse(`Site "${siteName}" Not Found in Supabase Storage.`, { 
+      status: 404 
+    });
   }
 
   const htmlContent = await data.text();
