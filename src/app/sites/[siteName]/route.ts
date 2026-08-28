@@ -7,18 +7,15 @@ export async function GET(
 ) {
   const resolvedParams = await params;
   
-  // Clean up URL encoding (converts %20 back to spaces)
-  const siteName = decodeURIComponent(resolvedParams.siteName).trim();
+  // Converts %20 back into a space so it matches "kcey digital"
+  const siteName = decodeURIComponent(resolvedParams.siteName);
 
-  // Fetch index.html from Supabase Storage
   const { data, error } = await supabase.storage
     .from('user-hosting-bucket')
     .download(`sites/${siteName}/index.html`);
 
   if (error || !data) {
-    return new NextResponse(`Site "${siteName}" Not Found in Supabase Storage.`, { 
-      status: 404 
-    });
+    return new NextResponse(`Site "${siteName}" not found in storage.`, { status: 404 });
   }
 
   const htmlContent = await data.text();
