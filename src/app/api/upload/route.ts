@@ -14,7 +14,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Force exact directory structure: sites/<siteName>/<fileName>
+    // Force strict folder creation: sites/<siteName>/<fileName>
     const cleanSiteName = siteName.trim();
     const storagePath = `sites/${cleanSiteName}/${file.name}`;
 
