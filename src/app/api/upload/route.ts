@@ -1,64 +1,42 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { PutObjectCommand } from '@aws-sdk/client-s3';
-import { r2 } from '@/lib/r2';
+import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-export async function POST(req: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const formData = await req.formData();
-    const file = formData.get('file') as File | null;
-    const siteName = formData.get('siteName') as string | null;
+    const formData = await request.formData();
+    const file = formData.get('file') as File;
+    const siteName = formData.get('siteName') as string;
 
     if (!file || !siteName) {
       return NextResponse.json(
-        { error: 'Missing file or project name.' },
+        { error: 'File and Site Name are required' },
         { status: 400 }
       );
     }
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    // Force exact directory structure: sites/<siteName>/<fileName>
+    const cleanSiteName = siteName.trim();
+    const storagePath = `sites/${cleanSiteName}/${file.name}`;
 
-    // Standard key path in R2
-    const key = `sites/${siteName}/index.html`;
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
-    // 1. Force upload to Cloudflare R2 first
-    await r2.send(
-      new PutObjectCommand({
-        Bucket: process.env.R2_BUCKET_NAME || 'user-hosting-bucket',
-        Key: key,
-        Body: buffer,
-        ContentType: file.type || 'text/html',
-      })
-    );
+    const { data, error } = await supabase.storage
+      .from('user-hosting-bucket')
+      .upload(storagePath, buffer, {
+        contentType: file.type || 'text/html',
+        upsert: true,
+      });
 
-    // 2. Write or update row in Supabase
-    const { error: dbError } = await supabase.from('sites').upsert(
-      [
-        {
-          site_name: siteName,
-          file_path: key,
-        },
-      ],
-      { onConflict: 'site_name' }
-    );
-
-    if (dbError) {
-      return NextResponse.json(
-        { error: `Database Error: ${dbError.message}` },
-        { status: 500 }
-      );
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({
-      message: 'Site deployed successfully!',
-      filePath: key,
+      success: true,
+      path: storagePath,
     });
-  } catch (error: any) {
-    console.error('Upload Error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Upload failed' },
-      { status: 500 }
-    );
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
